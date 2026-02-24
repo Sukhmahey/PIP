@@ -7,6 +7,7 @@ export interface ISelfReflection extends Document {
     type: 'pipo' | 'self';
     readAt: Date | null;
     imageName?: string;
+    motivation?: string;
     linkedSessionId?: mongoose.Types.ObjectId;
     scenarioId?: mongoose.Types.ObjectId;
     level?: number;

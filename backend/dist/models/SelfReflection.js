@@ -72,6 +72,11 @@ const SelfReflectionSchema = new mongoose_1.Schema({
         trim: true,
         // Optional: Used for Pipo messages to store avatar image name
     },
+    motivation: {
+        type: String,
+        trim: true,
+        // Optional: Used for Pipo messages to store motivation title
+    },
     linkedSessionId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'PracticeSession',

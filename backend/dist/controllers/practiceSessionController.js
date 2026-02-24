@@ -10,6 +10,82 @@ const Scenario_1 = __importDefault(require("../models/Scenario"));
 const practiceSessionAIService_1 = require("../services/practiceSessionAIService");
 const UserScenarioOverrides_1 = __importDefault(require("../models/UserScenarioOverrides"));
 const videoStorageService_1 = require("../services/videoStorageService");
+// Available Pipo images from pipo-for-note folder
+const PIPO_NOTE_IMAGES = [
+    'articlePipo.png',
+    'pipo-coffee.png',
+    'pipo-hi.png',
+    'pipo-job.png',
+    'pipo-loading.png',
+    'pipo-complete.png',
+    'loginPipo.png',
+];
+// Available motivation titles for Pipo notes
+const MOTIVATION_TITLES = [
+    "You trusted yourself a little more today",
+    "You showed up — and that's brave",
+    "You faced the moment with courage",
+    "You're learning to breathe through it",
+    "You chose progress over fear",
+    "One more step toward your confident self",
+    "You spoke with strength today",
+    "You turned anxiety into action",
+    "You took control — not fear",
+    "You're becoming your own supporter",
+    "Growth feels scary — and you did it anyway",
+    "Your voice mattered today",
+    "Courage whispered, and you listened",
+    "You're turning discomfort into power",
+    "A small victory, a huge step forward"
+];
+/**
+ * Get a random Pipo image filename based on a seed for consistency
+ * Uses seeded random so the same seed always returns the same image
+ */
+const getRandomPipoImage = (seed) => {
+    // Convert seed to number
+    let seedValue;
+    if (typeof seed === 'string') {
+        // Extract numbers from string or use hash
+        const numStr = seed.replace(/\D/g, '');
+        seedValue = numStr ? parseInt(numStr, 10) : seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    }
+    else {
+        seedValue = seed;
+    }
+    // Seeded random function
+    let value = Math.abs(seedValue);
+    const random = () => {
+        value = (value * 9301 + 49297) % 233280;
+        return value / 233280;
+    };
+    const index = Math.floor(random() * PIPO_NOTE_IMAGES.length);
+    return PIPO_NOTE_IMAGES[Math.max(0, Math.min(index, PIPO_NOTE_IMAGES.length - 1))] || PIPO_NOTE_IMAGES[0];
+};
+/**
+ * Get a random motivation title based on a seed for consistency
+ * Uses seeded random so the same seed always returns the same motivation
+ */
+const getRandomMotivation = (seed) => {
+    // Convert seed to number
+    let seedValue;
+    if (typeof seed === 'string') {
+        // Extract numbers from string or use hash
+        const numStr = seed.replace(/\D/g, '');
+        seedValue = numStr ? parseInt(numStr, 10) : seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    }
+    else {
+        seedValue = seed;
+    }
+    // Seeded random function (use different multiplier to get different sequence than image)
+    let value = Math.abs(seedValue);
+    const random = () => {
+        value = (value * 11059 + 49297) % 233280;
+        return value / 233280;
+    };
+    const index = Math.floor(random() * MOTIVATION_TITLES.length);
+    return MOTIVATION_TITLES[Math.max(0, Math.min(index, MOTIVATION_TITLES.length - 1))] || MOTIVATION_TITLES[0];
+};
 const generateFeedbackCardsFromFacialAnalysis = (facialAnalysis) => {
     const feedbackCards = [];
     if (!facialAnalysis) {
@@ -165,14 +241,14 @@ const completeSession = async (req, res) => {
                         try {
                             console.log('🎬 Starting background video generation and storage (completeSession)...');
                             const updatedQuestions = await (0, videoStorageService_1.generateAndStoreVideos)(nextQuestions, session.userId.toString(), session.scenarioId.toString(), nextLevel);
-                            // Update UserScenarioOverrides with new video URLs
+                            // Update UserScenarioOverrides with new D-ID video URLs
                             const updatedLevelKey = nextLevel === 2 ? 'level2' : 'level3';
                             const updatedUpdate = {};
                             updatedUpdate[updatedLevelKey] = { questions: updatedQuestions };
                             await UserScenarioOverrides_1.default.findOneAndUpdate({ userId: session.userId, scenarioId: session.scenarioId }, { $set: updatedUpdate });
                             // Count successfully generated videos
                             const successfulVideos = updatedQuestions.filter(q => q.videoUrl && q.videoUrl.startsWith('http')).length;
-                            console.log('✅ Successfully updated questions with Supabase video URLs (completeSession)', {
+                            console.log('✅ Successfully updated questions with D-ID video URLs (completeSession)', {
                                 userId: session.userId,
                                 scenarioId: session.scenarioId,
                                 nextLevel,
@@ -427,20 +503,20 @@ const createCompleteSession = async (req, res) => {
                         preview: nextQuestions.slice(0, 2)
                     });
                     // Generate and store videos in background (fire-and-forget)
-                    // This runs asynchronously and updates the questions with Supabase URLs
+                    // This runs asynchronously and updates the questions with D-ID URLs
                     // After videos are generated, unlock the next level
                     (async () => {
                         try {
                             console.log('🎬 Starting background video generation and storage...');
                             const updatedQuestions = await (0, videoStorageService_1.generateAndStoreVideos)(nextQuestions, userId.toString(), scenarioId.toString(), nextLevel);
-                            // Update UserScenarioOverrides with new video URLs
+                            // Update UserScenarioOverrides with new D-ID video URLs
                             const updatedLevelKey = nextLevel === 2 ? 'level2' : 'level3';
                             const updatedUpdate = {};
                             updatedUpdate[updatedLevelKey] = { questions: updatedQuestions };
                             await UserScenarioOverrides_1.default.findOneAndUpdate({ userId, scenarioId }, { $set: updatedUpdate });
-                            // Count successfully generated videos (those with Supabase URLs)
+                            // Count successfully generated videos (those with D-ID URLs)
                             const successfulVideos = updatedQuestions.filter(q => q.videoUrl && q.videoUrl.startsWith('http')).length;
-                            console.log('✅ Successfully updated questions with Supabase video URLs', {
+                            console.log('✅ Successfully updated questions with D-ID video URLs', {
                                 userId,
                                 scenarioId,
                                 nextLevel,
@@ -508,13 +584,19 @@ const createCompleteSession = async (req, res) => {
         if (pipoNoteContent.title && pipoNoteContent.body) {
             try {
                 console.log('📝 Creating Pipo note in database...');
+                // Generate random image filename and motivation based on sessionId and date for consistency
+                const dateStr = (session.completedAt || new Date()).toISOString().split('T')[0].replace(/-/g, '');
+                const seed = `${session._id}${dateStr}`;
+                const imageFilename = getRandomPipoImage(seed);
+                const motivation = getRandomMotivation(seed);
                 const pipoNote = await SelfReflection_1.default.create({
                     userId,
                     title: pipoNoteContent.title,
                     description: pipoNoteContent.body,
                     date: session.completedAt || new Date(),
                     type: 'pipo',
-                    imageName: 'articlePipo.png',
+                    imageName: imageFilename, // Random Pipo image based on sessionId and date
+                    motivation: motivation, // Random motivation title based on sessionId and date
                     linkedSessionId: session._id,
                     scenarioId,
                     level

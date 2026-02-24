@@ -10,6 +10,82 @@ const PracticeSession_1 = __importDefault(require("../models/PracticeSession"));
 const Scenario_1 = __importDefault(require("../models/Scenario"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const practiceSessionAIService_1 = require("../services/practiceSessionAIService");
+// Available Pipo images from pipo-for-note folder
+const PIPO_NOTE_IMAGES = [
+    'articlePipo.png',
+    'pipo-coffee.png',
+    'pipo-hi.png',
+    'pipo-job.png',
+    'pipo-loading.png',
+    'pipo-complete.png',
+    'loginPipo.png',
+];
+// Available motivation titles for Pipo notes
+const MOTIVATION_TITLES = [
+    "You trusted yourself a little more today",
+    "You showed up — and that's brave",
+    "You faced the moment with courage",
+    "You're learning to breathe through it",
+    "You chose progress over fear",
+    "One more step toward your confident self",
+    "You spoke with strength today",
+    "You turned anxiety into action",
+    "You took control — not fear",
+    "You're becoming your own supporter",
+    "Growth feels scary — and you did it anyway",
+    "Your voice mattered today",
+    "Courage whispered, and you listened",
+    "You're turning discomfort into power",
+    "A small victory, a huge step forward"
+];
+/**
+ * Get a random Pipo image filename based on a seed for consistency
+ * Uses seeded random so the same seed always returns the same image
+ */
+const getRandomPipoImage = (seed) => {
+    // Convert seed to number
+    let seedValue;
+    if (typeof seed === 'string') {
+        // Extract numbers from string or use hash
+        const numStr = seed.replace(/\D/g, '');
+        seedValue = numStr ? parseInt(numStr, 10) : seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    }
+    else {
+        seedValue = seed;
+    }
+    // Seeded random function
+    let value = Math.abs(seedValue);
+    const random = () => {
+        value = (value * 9301 + 49297) % 233280;
+        return value / 233280;
+    };
+    const index = Math.floor(random() * PIPO_NOTE_IMAGES.length);
+    return PIPO_NOTE_IMAGES[Math.max(0, Math.min(index, PIPO_NOTE_IMAGES.length - 1))] || PIPO_NOTE_IMAGES[0];
+};
+/**
+ * Get a random motivation title based on a seed for consistency
+ * Uses seeded random so the same seed always returns the same motivation
+ */
+const getRandomMotivation = (seed) => {
+    // Convert seed to number
+    let seedValue;
+    if (typeof seed === 'string') {
+        // Extract numbers from string or use hash
+        const numStr = seed.replace(/\D/g, '');
+        seedValue = numStr ? parseInt(numStr, 10) : seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    }
+    else {
+        seedValue = seed;
+    }
+    // Seeded random function (use different multiplier to get different sequence than image)
+    let value = Math.abs(seedValue);
+    const random = () => {
+        value = (value * 11059 + 49297) % 233280;
+        return value / 233280;
+    };
+    const index = Math.floor(random() * MOTIVATION_TITLES.length);
+    return MOTIVATION_TITLES[Math.max(0, Math.min(index, MOTIVATION_TITLES.length - 1))] || MOTIVATION_TITLES[0];
+};
 /**
  * Create a new self-reflection entry
  */
@@ -421,6 +497,11 @@ const createPipoNoteFromSession = async (req, res) => {
         // Generate AI-powered Pipo message
         const aiData = (0, practiceSessionAIService_1.prepareSessionDataForAI)(session, scenarioTitle);
         const pipoMessage = await (0, practiceSessionAIService_1.generatePipoNote)(aiData);
+        // Generate random image filename and motivation based on sessionId and date for consistency
+        const dateStr = (session.completedAt || new Date()).toISOString().split('T')[0].replace(/-/g, '');
+        const seed = `${session._id}${dateStr}`;
+        const imageFilename = getRandomPipoImage(seed);
+        const motivation = getRandomMotivation(seed);
         // Create the Pipo reflection note
         const pipoNote = await SelfReflection_1.default.create({
             userId: session.userId,
@@ -428,7 +509,8 @@ const createPipoNoteFromSession = async (req, res) => {
             description: pipoMessage.body,
             date: session.completedAt || new Date(),
             type: 'pipo',
-            imageName: 'articlePipo.png', // Default Pipo image
+            imageName: imageFilename, // Random Pipo image based on sessionId and date
+            motivation: motivation, // Random motivation title based on sessionId and date
             linkedSessionId: session._id,
             scenarioId: session.scenarioId,
             level: session.level,
